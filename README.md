@@ -10,7 +10,7 @@ KmHookX overrides the untriggered function (CarCopyRuleViolationDetails) with a 
 
 Then, KmHookX creates an exact copy of a function in an allocated pool, it writes a jmp 16-bit displacement to the untriggered function (CarCopyRuleViolationDetails) (JMP nt!CarCopyRuleViolationDetails) and shifts the whole function down by 5 bytes overriding the INT3s at the end of the function: 
 
-![CarCopyRuleViolationDetails trampoline](Images/c2.png)
+![JMP trampoline](Images/c2.png)
 
 
 KmHookX takes that allocated pool, and changes all of the offsets to the correct offset ensuring that the flow wont jump into an invalid address.
@@ -29,5 +29,22 @@ And your done! Now you can edit the file main.cpp and use the hooking library. I
 
 # Library usage
 
-## 1. KmHookFunction
+### 1. KmHookFunction
 
+![KmHookFunction](Images/c3.png)
+
+### Description:
+  A function that hooks any function in ntoskrnl.exe.
+#### Parameters:
+
+- **TargetFunction**: Function you want to hook/modify. *(MUST BE IN `NTOSKRNL.exe` or `nt!`...)*
+- **HookedFunction**: Your function where the hooked function will jump.
+- **originalFunction**: Pointer to your function object that will store the original function. **CAN BE NULL** if you wish to not use the original function. Must be `&(PVOID&)yourfunction`.
+- **hookstored**: Pointer to your `PVOID` object where you store the original function backup. *(USABLE IF YOU WILL UNHOOK THE FUNCTION LATER. DO NOT USE IT IF THE FUNCTION IS CALLED FREQUENTLY.)*
+
+#### Example: 
+
+Here we are hooking KeBugCheckEx and printing a message whenever its triggered: 
+
+![CarCopyRuleViolationDetails trampoline](Images/c6.png)
+      
