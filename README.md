@@ -18,3 +18,12 @@ After that, KmHookX commits the contents in the pool to the target function with
 
 and thats it, you can monitor all of functions no matter if its in ntoskrnl or win32kfull.sys.
 
+# How to use it?
+1. Clone this repo using (git clone https://github.com/krypt0nx/KmHookX.git) and move it to any folder in your favor.
+2. Open the cloned repo, and open folder cs_driver.
+3. Open cs_driver.sln with visual studio.
+4. press Build->Rebuild solution
+5. When your done, in solution explorer, right click on "capstone_static" and press "unload project".
+
+And your done! Now you can edit the file main.cpp and use the hooking library. If you need, you can integrate your existing project there. 
+
