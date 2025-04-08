@@ -27,3 +27,7 @@ and thats it, you can monitor all of functions no matter if its in ntoskrnl or w
 
 And your done! Now you can edit the file main.cpp and use the hooking library. If you need, you can integrate your existing project there. 
 
+# Library usage
+
+## 1. KmHookFunction
+
