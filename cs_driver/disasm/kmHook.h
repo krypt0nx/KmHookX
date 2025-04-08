@@ -390,11 +390,13 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 	memcpy((PVOID)((ULONG_PTR)preview + 5), TargetFunction, sizeFunction);
 
 	if (originalFunction != NULL)
-		
+	{
 		JMPFixer::WalkAddrFixerV2((PVOID)((ULONG_PTR)preview + 5), sizeFunction, callback, TargetFunction);
-	//JMPFixer::WalkShortJMPs((PVOID)((ULONG_PTR)preview + 5), sizeFunction, callbackShort, TargetFunction);
+		//JMPFixer::WalkShortJMPs((PVOID)((ULONG_PTR)preview + 5), sizeFunction, callbackShort, TargetFunction);
 
-	JMPFixer::GeneralAddressFixer((PVOID)((ULONG_PTR)preview + 5), sizeFunction, GenCallback, TargetFunction);
+		JMPFixer::GeneralAddressFixer((PVOID)((ULONG_PTR)preview + 5), sizeFunction, GenCallback, TargetFunction);
+
+	}
 
 
 
