@@ -46,5 +46,27 @@ And your done! Now you can edit the file main.cpp and use the hooking library. I
 
 Here we are hooking KeBugCheckEx and printing a message whenever its triggered: 
 
-![CarCopyRuleViolationDetails trampoline](Images/c6.png)
+![KmHookFunction example](Images/c6.png)
+
+### 2. KmHookFunctionEx
+
+![KmHookFunctionEx](Images/c5.png)
+
+### Description:
+  A function that hooks any function in any module of your choice.
+  You have to find your own untriggered function (A function that never hits a breakpoint/never gets called)
+  
+#### Parameters:
+
+- **TargetFunction**: Function you want to hook/modify. (CAN BE ANY MODULE)
+- **HookedFunction**: Your function where the hooked function will jump.
+- **originalFunction**: Pointer to your function object that will store the original function. **CAN BE NULL** if you wish to not use the original function. Must be `&(PVOID&)yourfunction`.
+- **KmCusJMP**: A function created by `Deploy_Custom_JMP_Pool` *(SEE UTILS USAGE)* to create a custom JMP
+- **hookstored**: Pointer to your `PVOID` object where you store the original function backup. *(USABLE IF YOU WILL UNHOOK THE FUNCTION LATER. DO NOT USE IT IF THE FUNCTION IS CALLED FREQUENTLY.)*
+
+#### Example: 
+
+Here we are hooking KeBugCheckEx and printing a message whenever its triggered: 
+
+![KmHookFunctionEx example](Images/c7.png)
       
