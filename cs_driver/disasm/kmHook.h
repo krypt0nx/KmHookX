@@ -149,9 +149,33 @@ PVOID kmCreateJMP(PVOID target) {
 
 	return realTF;
 }
+#define Deploy_Custom_JMP_PoolEx(modname,moduleName,base,address) \
+	PVOID modname(PVOID target) {\
+    static ULONG_PTR jmpIndex = 0; \
+    PVOID base = FindModule(moduleName); \
+    PVOID TargetFunction = address; \
+	SIZE_T size = JMPFixer::GetFunctionSize(TargetFunction); \
+	if (size <= 12 * jmpIndex) { \
+		kDbgError("WARNING: Appropriate size reached. Please find a new untriggered function! (size = %d) \n", 12 * jmpIndex); \
+		return (PVOID)0xCCCCCC111; \
+	} \
+    if (!base) { \
+        kDbg("Failed to find the base address of ntoskrnl.exe\n"); \
+        return nullptr; \
+    } \
+    if (!TargetFunction) { \
+        kDbg("Failed to find the target function in ntoskrnl.exe\n"); \
+        return nullptr; \
+    } \
+    BYTE jmp[12]; \
+    CraftJMP(target, jmp); \
+    PVOID realTF = (PVOID)((ULONG_PTR)TargetFunction + (sizeof(jmp) * jmpIndex)); \
+    WriteToReadOnly(realTF, jmp, sizeof(jmp)); \
+    jmpIndex += 1; \
+    kDbgStatus("Final address 0x%p\n", realTF); \
+    return realTF;}
 
-
-#define Deploy_Custom_JMP_Pool(modname,moduleName,Function) \
+#define Deploy_Custom_JMP_Pool(funcName,moduleName,Function) \
 	PVOID modname(PVOID target) {\
     static ULONG_PTR jmpIndex = 0; \
     PVOID base = FindModule(moduleName); \
@@ -251,7 +275,114 @@ void callback(JMPINFO jmp, PVOID target) {
 
 }
 
+void uncallback(JMPINFO jmp, PVOID target) {
+	JMPFixer::logJMP(jmp, target);
+	PVOID start = jmp.startAddress;
+	PVOID end = (PVOID)((ULONG_PTR)start + jmp.GeneralSize);
+	if (jmp.IsShort == TRUE) {
 
+		INT32 offset = ((INT32)jmp.offset + 5);
+		//	kDbgStatus("SHORT::::::::::::::\nWRITING OFFSET FROM \n\t0x%X\n", jmp.offset);
+			//kDbgStatus("TO: \n\t0x%X\n", offset);
+
+
+
+		//	kDbgStatus("Addresses:\n\tstart: 0x%p", start);
+		//	kDbgStatus("\n\tend: 0x%p\n", end);
+		if (InRange(end, start, jmp.redirectAddress)) {
+			//	kDbgStatus("THE OFFSET STANDS IN RANGE!!! 0x%p\n",jmp.redirectAddress);
+		}
+		else {
+			//kDbgStatus("THE OFFSET OUT RANGE!!! 0x%p\n", jmp.redirectAddress);
+
+			BYTE bt[2] = { jmp.JMPType,  offset };
+
+			memcpy(jmp.jmpAddress, bt, 2);
+		}
+
+
+
+		return;
+	}
+	if (ISCALLJMP(jmp.JMPType)) {
+		BYTE byte[JMP_SIZE];
+		INT32 offset = (INT32)(jmp.offset + 5);
+
+
+		if (InRange(end, start, jmp.redirectAddress)) {
+			//	kDbgStatus("THE OFFSET STANDS IN RANGE LONGGGG!!! 0x%p\n", jmp.redirectAddress);
+		}
+		else {
+			//	kDbgStatus("THE OFFSET OUT RANGE LONGGG!!! 0x%p\n", jmp.redirectAddress);
+
+			JMPFixer::makeConditionalJMPs(byte, offset, jmp.JMPType);
+
+			memcpy(jmp.jmpAddress, byte, JMP_SIZE);
+
+
+		}
+
+		//	kDbgStatus("WRITING OFFSET FROM \n\t0x%X\n", jmp.offset);
+		//	kDbgStatus("TO: \n\t0x%X\n", offset);
+
+	}
+	else {
+		BYTE byte[JMP_SIZE_CON];
+		INT32 offset = (INT32)(jmp.offset + 5);
+
+		if (((ULONG_PTR)end > (ULONG_PTR)jmp.redirectAddress) && ((ULONG_PTR)start <= (ULONG_PTR)jmp.redirectAddress)) {
+			//	kDbgStatus("THE OFFSET STANDS IN RANGE LONGGGG!!! 0x%p\n", jmp.redirectAddress);
+		}
+		else {
+			//	kDbgStatus("THE OFFSET OUT RANGE LONGGG!!! 0x%p\n", jmp.redirectAddress);
+
+
+			JMPFixer::makeConditionalJMP(byte, offset, jmp.JMPType);
+			memcpy(jmp.jmpAddress, byte, JMP_SIZE_CON);
+
+		}
+
+
+
+	}
+
+
+}
+
+void UnGenCallback(GENADDRINFO info) {
+
+	if (info.NMOD == 1 && info.RM == 1) {
+		kDbgStatus("offset: %x\n", info.offset);
+		kDbgStatus("postJMP: %p\n", info.postTargetAddress);
+		kDbgStatus("target address: %p\n", info.TargetAddress);
+		kDbgStatus("address: %p\n", info.address);
+		kDbgStatus("Atomic: 0x%X\n", info.IsAtomicOperation);
+
+		kDbgStatus("MODRM (BYTE): 0x%X\n", info.MODRMByte);
+
+		kDbgStatus("\tMODRM (NMODRM) TRUE = 1, FALSE = 0: %p\n", info.NMOD);
+		kDbgStatus("\tMODRM (RM)  TRUE = 1, FALSE = 0: %p\n", info.RM);
+
+
+		PVOID end = (PVOID)((ULONG_PTR)info.startAddress + info.GeneralSize);
+		if (InRange(end, info.startAddress, info.TargetAddress)) {
+			kDbg("\n\nThis function stands in range, do not change.\n\n");
+		}
+		else {
+			INT32 newOffset = (INT32)(info.offset + 5);
+
+			kDbg("\n\nThis function out of range, needs a change\n");
+			kDbgStatus("\n\tOld offset: 0x%X\n", info.offset);
+			kDbgStatus("\n\tNew offset: 0x%X\n\n", newOffset);
+
+			JMPFixer::makeOffset((BYTE*)((ULONG_PTR)info.address + OffsetAlignment(info.Is8Bit, info.IsAtomicOperation) + 1), newOffset);
+		}
+
+	}
+
+
+
+}
 /*
 PVOID kmHookFunction(PVOID TargetFunction, PVOID HookedFunction, PVOID* originalFunction) {
 	SIZE_T sizeFunction = JMPFixer::GetFunctionSize(TargetFunction, 0);
@@ -349,17 +480,14 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 	SIZE_T allsize = JMPFixer::GetFunctionSize(TargetFunction, 1);
 	SIZE_T sizeofInt3 = allsize - sizeFunction;
 
-	kDbgStatus("The size; %d\n", allsize);
-
 	if (!(hookstored == 0)) {
 		PVOID backup = ExAllocatePool(NonPagedPool, allsize);
-
-		kDbgStatus("The backup: %d\n", backup);
 
 		memcpy(backup, TargetFunction, allsize);
 
 		*hookstored = backup;
 	}
+
 
 
 	if (sizeofInt3 < 5) {
@@ -392,14 +520,14 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 
 	memcpy((PVOID)((ULONG_PTR)preview + 5), TargetFunction, sizeFunction);
 
-	if (originalFunction != NULL)
-	{
+	if (originalFunction != NULL) {
 		JMPFixer::WalkAddrFixerV2((PVOID)((ULONG_PTR)preview + 5), sizeFunction, callback, TargetFunction);
 		//JMPFixer::WalkShortJMPs((PVOID)((ULONG_PTR)preview + 5), sizeFunction, callbackShort, TargetFunction);
 
 		JMPFixer::GeneralAddressFixer((PVOID)((ULONG_PTR)preview + 5), sizeFunction, GenCallback, TargetFunction);
-
 	}
+		
+
 
 
 
@@ -452,3 +580,29 @@ void kmUnhookFunction(PVOID TargetFunction, PVOID hookstored) {
 
 	WriteToReadOnly(TargetFunction, (BYTE*)hookstored, JMPFixer::GetFunctionSize(hookstored));
 }
+BOOLEAN kmIsHooked(PVOID TargetFunction) {
+	return (MmIsAddressValid(TargetFunction)) ? (*(BYTE*)(TargetFunction) == 0xe9) : FALSE;
+}
+void kmUnhookFunctionEx(PVOID TargetFunction, SIZE_T size = 0) {
+
+	if (!kmIsHooked(TargetFunction))
+		return; // No need for unhooking.
+
+	SIZE_T sizeFunction = (size == 0) ? JMPFixer::GetFunctionSize((PVOID)((ULONG_PTR)TargetFunction + 5), 1) : size;
+
+	PVOID preview = ExAllocatePool(NonPagedPool, sizeFunction + 5);
+
+	memcpy(preview, TargetFunction,sizeFunction);
+
+	kDbgStatus("unhook preview: %p\n", preview);
+
+	JMPFixer::WalkAddrFixerV2(preview, sizeFunction, uncallback, NULL);
+	JMPFixer::GeneralAddressFixer(preview, sizeFunction, UnGenCallback, NULL);
+	
+	RtlFillMemory((PVOID)((ULONG_PTR)preview + sizeFunction), 5, 0xCC);
+
+	kDbgStatus("Fill : %p\n", (PVOID)((ULONG_PTR)preview + sizeFunction));
+
+	WriteToReadOnly(TargetFunction, (BYTE*)((ULONG_PTR)preview + 5), sizeFunction);
+}
+
