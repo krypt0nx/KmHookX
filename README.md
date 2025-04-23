@@ -46,7 +46,37 @@ And your done! Now you can edit the file main.cpp and use the hooking library. I
 
 Here we are hooking KeBugCheckEx and printing a message whenever its triggered: 
 
-![KmHookFunction example](Images/c6.png)
+```cpp
+#include "kmHook.h"
+
+typedef NTSTATUS(*KeBugCheckExc)(
+    _In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4
+);
+
+KeBugCheckExc originalFunction;
+
+NTSTATUS HookedBugCheckEx(_In_ ULONG BugCheckCode,
+                          _In_ ULONG_PTR BugCheckParameter1,
+                          _In_ ULONG_PTR BugCheckParameter2,
+                          _In_ ULONG_PTR BugCheckParameter3,
+                          _In_ ULONG_PTR BugCheckParameter4) {
+
+    DbgPrint("Oh noeees!!!!!!!!!\n");
+    return originalFunction(BugCheckCode, BugCheckParameter1, BugCheckParameter2, BugCheckParameter3, BugCheckParameter4);
+}
+
+NTSTATUS DriverEntry() {
+    
+    kmHookFunction(KeBugCheckEx, HookedBugCheckEx, &(PVOID&)originalFunction);
+
+    return STATUS_SUCCESS;
+}
+
+```
 
 ### 2. KmHookFunctionEx
 
@@ -68,5 +98,256 @@ Here we are hooking KeBugCheckEx and printing a message whenever its triggered:
 
 Here we are hooking KeBugCheckEx and printing a message whenever its triggered: 
 
-![KmHookFunctionEx example](Images/c7.png)
-      
+
+```cpp
+#include "kmHook.h"
+
+Deploy_Custom_JMP_Pool(MyJMP, "win32kfull.sys", "NtUserResolveDesktopForWOW");  // A function that never gets triggered
+
+typedef BOOLEAN(*fNtEngGdiBitBlt)(PVOID hDCDest, INT XDest, INT YDest, INT Width, INT Height, 
+                                  PVOID hDCSrc, INT XSrc, INT YSrc, ULONG dwRop, 
+                                  IN ULONG crBackColor, IN FLONG fl);
+
+fNtEngGdiBitBlt NtGdiEngBitBlt;
+
+BOOLEAN MyBitBlt(PVOID hDCDest, INT XDest, INT YDest, INT Width, INT Height, 
+                 PVOID hDCSrc, INT XSrc, INT YSrc, ULONG dwRop, IN ULONG crBackColor, IN FLONG fl) {
+    kDbg("BitBlt was called!");
+    return NtGdiEngBitBlt(hDCDest, XDest, YDest, Width, Height, hDCSrc, XSrc, YSrc, dwRop, crBackColor, fl);
+}
+
+NTSTATUS DriverEntry() {
+    PVOID win32k = FindModule("win32kfull.sys");
+    PVOID NtGdiEngBitBlt_Location = GetFunctionExport(win32k, "NtGdiEngBitBlt"); 
+
+    kmHookFunctionEx(
+        NtGdiEngBitBlt_Location,      /// Hook what?
+
+        MyBitBlt,                     // Redirect where?
+
+        &(PVOID&)NtGdiEngBitBlt,      // Original function where?
+
+        MyJMP,                        // JMP function where?
+
+        NULL                          // Create backup??
+    );
+
+    return STATUS_SUCCESS;
+}
+
+```
+
+
+### 3. KmIsHooked
+
+![KmIsHooked](Images/c9.png)
+
+### Description:
+  A function that checks if the function is already hooked.
+  
+#### Parameters:
+
+- **TargetFunction**: A function that will be checked 
+
+#### Example: 
+
+Here we are checking if KeBugCheckEx is hooked 
+
+```cpp
+#include "kmHook.h"
+
+
+typedef NTSTATUS(*KeBugCheckExc)(
+    _In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4
+);
+
+KeBugCheckExc originalFunction;
+
+NTSTATUS HookedBugCheckEx(_In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4) {
+
+    DbgPrint("Oh noeees!!!!!!!!\n");
+    return originalFunction(BugCheckCode, BugCheckParameter1, BugCheckParameter2, BugCheckParameter3, BugCheckParameter4);
+
+}
+
+
+NTSTATUS DriverEntry() {
+
+    
+    if (kmIsHooked(KeBugCheckEx)) 
+        kDbg("ITS HOOKED!"); // its already hooked (probably a double-run)
+    else 
+        kmHookFunction(KeBugCheckEx, HookedBugCheckEx, &(PVOID&)originalFunction); // if not hooked, then hook it.
+
+    return STATUS_SUCCESS;
+}
+
+
+
+```
+
+
+### 4. kmUnhookFunction
+
+![kmUnhookFunction](Images/c10.png)
+
+### Description:
+  A function that unhooks the function based on the saved hook (hookstored)
+  
+#### Parameters:
+
+- **TargetFunction**: A function that will be checked
+- **hookstored**: A memory location of the hookstored (Passed thru KmHookFunction/Ex)
+
+#### Example: 
+
+Here we are hooking KeBugCheckEx and then we unhook it
+
+```cpp
+#include "kmHook.h"
+
+
+typedef NTSTATUS(*KeBugCheckExc)(
+    _In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4
+);
+
+KeBugCheckExc originalFunction;
+
+NTSTATUS HookedBugCheckEx(_In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4) {
+
+    DbgPrint("Oh noeees!!!!!!!!\n");
+    return originalFunction(BugCheckCode, BugCheckParameter1, BugCheckParameter2, BugCheckParameter3, BugCheckParameter4);
+
+}
+
+
+NTSTATUS DriverEntry() {
+    PVOID f_hookstored;
+    
+    kmHookFunction(KeBugCheckEx, HookedBugCheckEx, &(PVOID&)originalFunction,&f_hookstored); // store the hook in f_hookstored.
+
+    DbgBreakPoint();
+
+    kmUnhookFunction(KeBugCheckEx, f_hookstored);
+
+    return STATUS_SUCCESS;
+}
+
+
+
+```
+
+
+### 4. kmUnhookFunctionEx
+
+![kmUnhookFunctionEx](Images/c11.png)
+
+### Description:
+  A function that unhooks the function based on the function size (if its already hooked)
+
+``` Go to the 'How to get size' section if you want to know how you can get the size of the function```
+  
+#### Parameters:
+
+- **TargetFunction**: A function that will be checked
+- **size**: The size of the function in bytes.
+
+#### How to get the function size? :
+- **Go to your target function**: Open windbg and then on ```@$scopeip``` in dissassebly type the function name. (i.e ```nt!KeBugCheckEx``` or ```win32kfull!NtEngGdiBitBlt```)
+
+
+![Go to your target function](Images/c12.png)
+
+
+  There, you see your function (in our case its nt!KeBugCheckEx).
+  
+- **Get the function name after your target function** : In that window, scroll down until you see a different function name.
+  
+![Next function](Images/c13.png)
+  
+  There, I scrolled down, I saw a different function name called (```nt!KeContextToKframes```)
+  Now we know, the next function is nt!KeContextToKframes
+  
+- **Go to your kd command** and type this: 
+``` ? nextfunc - targetfunc```
+
+  Our case:
+  
+    targetfunc = ```nt!KeBugCheckEx```
+  
+    nextfunc = ```nt!KeContextToKframes```
+  
+![Next function](Images/c14.png)
+
+  **and the output is your size needed.**
+#### Example: 
+
+Here we are hooking KeBugCheckEx and then we unhook it
+
+```cpp
+#include "kmHook.h"
+
+
+typedef NTSTATUS(*KeBugCheckExc)(
+    _In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4
+);
+
+KeBugCheckExc originalFunction;
+
+NTSTATUS HookedBugCheckEx(_In_ ULONG BugCheckCode,
+    _In_ ULONG_PTR BugCheckParameter1,
+    _In_ ULONG_PTR BugCheckParameter2,
+    _In_ ULONG_PTR BugCheckParameter3,
+    _In_ ULONG_PTR BugCheckParameter4) {
+
+    DbgPrint("Oh noeees!!!!!!!!\n");
+    return originalFunction(BugCheckCode, BugCheckParameter1, BugCheckParameter2, BugCheckParameter3, BugCheckParameter4);
+
+}
+
+
+NTSTATUS DriverEntry() {
+
+    
+    if (!kmIsHooked(KeBugCheckEx)) { // If its not hooked, then hook it.
+        kmHookFunction(KeBugCheckEx, HookedBugCheckEx, &(PVOID&)originalFunction);
+
+
+    }
+    else {
+        kDbg("ITS HOOKED!"); // its already hooked.
+    }
+
+    DbgBreakPoint();
+
+    kmUnhookFunctionEx(KeBugCheckEx, 0x130);  // 0x130 = 304 in decimal. Unhook kebugcheckex.
+    return STATUS_SUCCESS;
+}
+
+
+
+
+
+```
+
+
