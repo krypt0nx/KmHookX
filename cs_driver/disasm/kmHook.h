@@ -349,14 +349,17 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 	SIZE_T allsize = JMPFixer::GetFunctionSize(TargetFunction, 1);
 	SIZE_T sizeofInt3 = allsize - sizeFunction;
 
+	kDbgStatus("The size; %d\n", allsize);
+
 	if (!(hookstored == 0)) {
-		PVOID backup = ExAllocatePool(NonPagedPool, sizeFunction);
+		PVOID backup = ExAllocatePool(NonPagedPool, allsize);
+
+		kDbgStatus("The backup: %d\n", backup);
 
 		memcpy(backup, TargetFunction, allsize);
 
 		*hookstored = backup;
 	}
-
 
 
 	if (sizeofInt3 < 5) {
