@@ -492,12 +492,6 @@ PVOID KmFindByPattern(PVOID start, BYTE* pattern, const char* mask, SIZE_T size,
 			return (PVOID)address;
 		}
 	}
-
-	// Debug pattern dump
-	for (SIZE_T i = 0; i < len; i++) {
-		kDbgStatus("0x%02X %c\n", pattern[i], mask[i]);
-	}
-
 	return nullptr;
 }
 
