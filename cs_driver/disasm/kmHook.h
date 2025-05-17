@@ -472,9 +472,39 @@ typedef PVOID(__stdcall* createJMP)(PVOID);
 	b.QuadPart = -10000000LL;\
 	KeDelayExecutionThread(KernelMode, FALSE, &b);
 
+PVOID KmFindByPattern(PVOID start, BYTE* pattern, const char* mask, SIZE_T size, SIZE_T MaxIndex = 0xFFA08) {
+	SIZE_T maskLength = strlen(mask);
+	SIZE_T len = min(maskLength, size);
+
+	for (SIZE_T i = 0; i < MaxIndex; i++) {
+		BYTE* address = (BYTE*)start + i;
+		BOOLEAN found = TRUE;
+
+		for (SIZE_T j = 0; j < len; j++) {
+			if (mask[j] == 'x' && address[j] != pattern[j]) {
+				found = FALSE;
+				break;
+			}
+		}
+
+		if (found) {
+			kDbgStatus("Got address: 0x%p\n", address);
+			return (PVOID)address;
+		}
+	}
+
+	// Debug pattern dump
+	for (SIZE_T i = 0; i < len; i++) {
+		kDbgStatus("0x%02X %c\n", pattern[i], mask[i]);
+	}
+
+	return nullptr;
+}
 
 
 void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* originalFunction, createJMP kmCusJMP,PVOID* hookstored = 0) {
+
+//	KIRQL oldIrql = KeGetCurrentIrql();
 
 	SIZE_T sizeFunction = JMPFixer::GetFunctionSize(TargetFunction, 0);
 	SIZE_T allsize = JMPFixer::GetFunctionSize(TargetFunction, 1);
@@ -531,14 +561,14 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 
 
 
-	KIRQL oldIrql;
+
 
 #ifndef KMHOOK_SAFETY_FEATURES_OFF
 	KAFFINITY affinity = KeQueryActiveProcessors();
 	KeSetSystemAffinityThreadEx(affinity);  // Make sure we run on a single core
 #endif
 
-	KeRaiseIrql(DISPATCH_LEVEL, &oldIrql);  // Prevent task switches
+//	KeRaiseIrql(DISPATCH_LEVEL, &oldIrql);  // Prevent task switches
 
 	kDbg("Raised irql to DISPATCH_LEVEL and running single core... + Pausing cpu.\n");
 
@@ -559,7 +589,7 @@ void kmHookFunctionEx(PVOID TargetFunction, PVOID HookedFunction, PVOID* origina
 	//kDbg("Restoring processors.\n");
 
 
-	KeLowerIrql(oldIrql);
+//	KeLowerIrql(0);
 #ifndef KMHOOK_SAFETY_FEATURES_OFF
 	KeRevertToUserAffinityThreadEx(affinity);
 #endif
@@ -592,7 +622,7 @@ void kmUnhookFunctionEx(PVOID TargetFunction, SIZE_T size = 0) {
 
 	PVOID preview = ExAllocatePool(NonPagedPool, sizeFunction + 5);
 
-	memcpy(preview, TargetFunction,sizeFunction);
+	memcpy(preview, (PVOID)((ULONG_PTR)TargetFunction + 5),sizeFunction);
 
 	kDbgStatus("unhook preview: %p\n", preview);
 
@@ -603,6 +633,7 @@ void kmUnhookFunctionEx(PVOID TargetFunction, SIZE_T size = 0) {
 
 	kDbgStatus("Fill : %p\n", (PVOID)((ULONG_PTR)preview + sizeFunction));
 
-	WriteToReadOnly(TargetFunction, (BYTE*)((ULONG_PTR)preview + 5), sizeFunction);
+	WriteToReadOnly(TargetFunction, (BYTE*)preview, sizeFunction + 5);
+
 }
 
